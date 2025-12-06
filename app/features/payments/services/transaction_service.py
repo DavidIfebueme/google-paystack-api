@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.features.payments.models.transaction import Transaction, TransactionStatus
 
@@ -12,11 +12,13 @@ class TransactionService:
         reference: str,
         amount: int,
         authorization_url: str,
+        email: str,
         user_id: Optional[str] = None
     ) -> Transaction:
         transaction = Transaction(
             reference=reference,
             amount=amount,
+            email=email,
             authorization_url=authorization_url,
             user_id=user_id,
             status=TransactionStatus.pending
@@ -30,6 +32,30 @@ class TransactionService:
     async def get_transaction_by_reference(db: AsyncSession, reference: str) -> Optional[Transaction]:
         result = await db.execute(
             select(Transaction).where(Transaction.reference == reference)
+        )
+        return result.scalar_one_or_none()
+    
+    @staticmethod
+    async def find_recent_transaction(
+        db: AsyncSession,
+        email: str,
+        amount: int,
+        minutes: int = 10
+    ) -> Optional[Transaction]:
+        cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
+        
+        result = await db.execute(
+            select(Transaction)
+            .where(
+                and_(
+                    Transaction.email == email,
+                    Transaction.amount == amount,
+                    Transaction.created_at >= cutoff_time,
+                    Transaction.status.in_([TransactionStatus.pending, TransactionStatus.success])
+                )
+            )
+            .order_by(Transaction.created_at.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
     

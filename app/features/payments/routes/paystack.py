@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query, Header
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
+from typing import Optional
 
 from app.platform.db.base import get_db
 from app.platform.response.schemas import success_response, error_response
@@ -20,22 +21,17 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 @router.post("/paystack/initiate", status_code=status.HTTP_201_CREATED)
 async def initiate_payment(
     payment_request: PaymentInitiateRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    x_idempotency_key: Optional[str] = Header(None, description="Optional idempotency key for duplicate prevention")
 ):
     try:
-        result = await PaystackService.initialize_transaction(
-            amount=payment_request.amount,
-            email=payment_request.email
+        existing_transaction = await TransactionService.find_recent_transaction(
+            db=db,
+            email=payment_request.email,
+            amount=payment_request.amount
         )
         
-        duplicate = await TransactionService.check_duplicate_transaction(
-            db, result["reference"]
-        )
-        
-        if duplicate:
-            existing_transaction = await TransactionService.get_transaction_by_reference(
-                db, result["reference"]
-            )
+        if existing_transaction:
             return success_response(
                 message="Transaction already exists",
                 data={
@@ -45,11 +41,17 @@ async def initiate_payment(
                 status_code=200
             )
         
+        result = await PaystackService.initialize_transaction(
+            amount=payment_request.amount,
+            email=payment_request.email
+        )
+        
         transaction = await TransactionService.create_transaction(
             db=db,
             reference=result["reference"],
             amount=payment_request.amount,
-            authorization_url=result["authorization_url"]
+            authorization_url=result["authorization_url"],
+            email=payment_request.email
         )
         
         return success_response(
@@ -123,7 +125,7 @@ async def paystack_webhook(request: Request, db: AsyncSession = Depends(get_db))
 @router.get("/{reference}/status")
 async def get_transaction_status(
     reference: str,
-    refresh: bool = Query(False),
+    refresh: bool = Query(False, description="If true, fetches latest status from Paystack"),
     db: AsyncSession = Depends(get_db)
 ):
     try:
