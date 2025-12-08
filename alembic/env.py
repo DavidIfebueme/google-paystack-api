@@ -9,6 +9,8 @@ from app.platform.config.settings import get_settings
 from app.platform.db.base import Base
 from app.features.auth.models.user import User
 from app.features.payments.models.transaction import Transaction
+from app.features.wallet.models.wallet import Wallet
+from app.features.api_keys.models.api_key import APIKey
 
 config = context.config
 settings = get_settings()

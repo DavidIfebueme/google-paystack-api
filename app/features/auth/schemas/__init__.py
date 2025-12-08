@@ -1,3 +1,13 @@
-from app.features.auth.schemas.auth import GoogleAuthURLResponse, GoogleUserInfo, UserResponse
+from app.features.auth.schemas.auth import (
+    GoogleAuthURLResponse,
+    UserResponse,
+    GoogleUserInfo,
+    TokenResponse
+)
 
-__all__ = ["GoogleAuthURLResponse", "GoogleUserInfo", "UserResponse"]
+__all__ = [
+    "GoogleAuthURLResponse",
+    "UserResponse",
+    "GoogleUserInfo",
+    "TokenResponse"
+]

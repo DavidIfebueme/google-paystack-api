@@ -1,0 +1,78 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+import uuid
+from app.features.payments.models.transaction import Transaction, TransactionStatus, TransactionType
+
+class WalletTransactionService:
+    
+    @staticmethod
+    async def create_deposit_transaction(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        reference: str,
+        amount: int,
+        authorization_url: str,
+        email: str
+    ) -> Transaction:
+        existing = await WalletTransactionService.get_transaction_by_reference(db, reference)
+        if existing:
+            return existing
+        
+        transaction = Transaction(
+            reference=reference,
+            user_id=user_id,
+            amount=amount,
+            email=email,
+            status=TransactionStatus.pending,
+            transaction_type=TransactionType.deposit,
+            authorization_url=authorization_url
+        )
+        
+        db.add(transaction)
+        await db.commit()
+        await db.refresh(transaction)
+        return transaction
+    
+    @staticmethod
+    async def create_transfer_transaction(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        sender_wallet_id: uuid.UUID,
+        recipient_wallet_id: uuid.UUID,
+        amount: int,
+        reference: str
+    ) -> Transaction:
+        existing = await WalletTransactionService.get_transaction_by_reference(db, reference)
+        if existing:
+            raise ValueError("Transfer already processed")
+        
+        transaction = Transaction(
+            reference=reference,
+            user_id=user_id,
+            amount=amount,
+            status=TransactionStatus.success,
+            transaction_type=TransactionType.transfer,
+            sender_wallet_id=sender_wallet_id,
+            recipient_wallet_id=recipient_wallet_id
+        )
+        
+        db.add(transaction)
+        await db.commit()
+        await db.refresh(transaction)
+        return transaction
+    
+    @staticmethod
+    async def get_user_transactions(db: AsyncSession, user_id: uuid.UUID) -> list[Transaction]:
+        result = await db.execute(
+            select(Transaction)
+            .where(Transaction.user_id == user_id)
+            .order_by(Transaction.created_at.desc())
+        )
+        return list(result.scalars().all())
+    
+    @staticmethod
+    async def get_transaction_by_reference(db: AsyncSession, reference: str) -> Transaction | None:
+        result = await db.execute(
+            select(Transaction).where(Transaction.reference == reference)
+        )
+        return result.scalar_one_or_none()

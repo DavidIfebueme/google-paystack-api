@@ -1,76 +1,34 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query, Header
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timezone
-from typing import Optional
-
-from app.platform.db.base import get_db
-from app.platform.response.schemas import success_response, error_response
+from sqlalchemy import select
+from datetime import datetime
+from app.platform.db import get_db
 from app.features.payments.services.paystack_service import PaystackService
-from app.features.payments.services.transaction_service import TransactionService
-from app.features.payments.schemas.payment import (
-    PaymentInitiateRequest,
-    PaymentInitiateResponse,
-    TransactionStatusResponse,
-    PaystackWebhookEvent
-)
-from app.features.payments.models.transaction import TransactionStatus
+from app.features.payments.schemas.payment import PaymentInitiateRequest as InitializeTransactionRequest, PaymentInitiateResponse as InitializeTransactionResponse
+from app.features.wallet.services.wallet_service import WalletService
+from app.features.wallet.services.transaction_service import WalletTransactionService
+from app.features.payments.models.transaction import Transaction, TransactionStatus
+from app.platform.response.schemas import success_response, error_response, ErrorCode
 
-router = APIRouter(prefix="/payments", tags=["Payments"])
+router = APIRouter()
 
-@router.post("/paystack/initiate", status_code=status.HTTP_201_CREATED)
-async def initiate_payment(
-    payment_request: PaymentInitiateRequest,
-    db: AsyncSession = Depends(get_db),
-    x_idempotency_key: Optional[str] = Header(None, description="Optional idempotency key for duplicate prevention")
-):
+@router.post("/initialize")
+async def initialize_payment(request: InitializeTransactionRequest, db: AsyncSession = Depends(get_db)):
     try:
-        existing_transaction = await TransactionService.find_recent_transaction(
-            db=db,
-            email=payment_request.email,
-            amount=payment_request.amount
-        )
-        
-        if existing_transaction:
-            return success_response(
-                message="Transaction already exists",
-                data={
-                    "reference": existing_transaction.reference,
-                    "authorization_url": existing_transaction.authorization_url
-                },
-                status_code=200
-            )
-        
         result = await PaystackService.initialize_transaction(
-            amount=payment_request.amount,
-            email=payment_request.email
+            amount=request.amount,
+            email=request.email
         )
         
-        transaction = await TransactionService.create_transaction(
-            db=db,
-            reference=result["reference"],
-            amount=payment_request.amount,
-            authorization_url=result["authorization_url"],
-            email=payment_request.email
-        )
+        response = InitializeTransactionResponse(**result)
         
         return success_response(
-            message="Payment initialized successfully",
-            data={
-                "reference": transaction.reference,
-                "authorization_url": transaction.authorization_url
-            },
+            message="Transaction initialized successfully",
+            data=response.model_dump(),
             status_code=201
         )
     except Exception as e:
-        response = error_response(
-            message=f"Payment initialization failed: {str(e)}",
-            status_code=500
-        )
-        return JSONResponse(
-            status_code=500,
-            content=response.model_dump()
-        )
+        return error_response(message=f"Failed to initialize transaction: {str(e)}", status_code=500)
 
 @router.post("/paystack/webhook")
 async def paystack_webhook(request: Request, db: AsyncSession = Depends(get_db)):
@@ -79,101 +37,66 @@ async def paystack_webhook(request: Request, db: AsyncSession = Depends(get_db))
         signature = request.headers.get("x-paystack-signature", "")
         
         if not PaystackService.verify_webhook_signature(body, signature):
-            response = error_response(
-                message="Invalid signature",
-                status_code=400
-            )
-            return JSONResponse(
-                status_code=400,
-                content=response.model_dump()
-            )
+            return error_response(message="Invalid signature", status_code=400)
         
-        event = await request.json()
-        webhook_event = PaystackWebhookEvent(**event)
+        payload = await request.json()
+        event = payload.get("event")
+        data = payload.get("data", {})
         
-        if webhook_event.event == "charge.success":
-            reference = webhook_event.data.get("reference")
-            paid_at_str = webhook_event.data.get("paid_at")
+        if event == "charge.success":
+            reference = data.get("reference")
             
-            paid_at = datetime.fromisoformat(paid_at_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            result = await db.execute(
+                select(Transaction)
+                .where(Transaction.reference == reference)
+                .with_for_update()
+            )
+            transaction = result.scalar_one_or_none()
             
-            await TransactionService.update_transaction_status(
-                db=db,
-                reference=reference,
-                status=TransactionStatus.success,
-                paid_at=paid_at
+            if not transaction:
+                return error_response(
+                    message="Transaction not found",
+                    status_code=404,
+                    error_code=ErrorCode.TRANSACTION_NOT_FOUND
+                )
+            
+            if transaction.status == TransactionStatus.success:
+                return success_response(
+                    message="Transaction already processed",
+                    data={"status": True},
+                    status_code=200
+                )
+            
+            wallet = await WalletService.get_wallet_by_user_id(db, transaction.user_id)
+            
+            if not wallet:
+                return error_response(
+                    message="Wallet not found",
+                    status_code=404,
+                    error_code=ErrorCode.WALLET_NOT_FOUND
+                )
+            
+            await WalletService.credit_wallet(db, wallet.id, transaction.amount)
+            
+            transaction.status = TransactionStatus.success
+            transaction.paid_at = datetime.utcnow()
+            await db.commit()
+            
+            return success_response(
+                message="Webhook processed successfully",
+                data={"status": True},
+                status_code=200
             )
-        elif webhook_event.event == "charge.failed":
-            reference = webhook_event.data.get("reference")
-            await TransactionService.update_transaction_status(
-                db=db,
-                reference=reference,
-                status=TransactionStatus.failed
-            )
-        
-        return {"status": True}
-    except Exception as e:
-        response = error_response(
-            message=f"Webhook processing failed: {str(e)}",
-            status_code=500
-        )
-        return JSONResponse(
-            status_code=500,
-            content=response.model_dump()
-        )
-
-@router.get("/{reference}/status")
-async def get_transaction_status(
-    reference: str,
-    refresh: bool = Query(False, description="If true, fetches latest status from Paystack"),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        transaction = await TransactionService.get_transaction_by_reference(db, reference)
-        
-        if not transaction:
-            response = error_response(
-                message="Transaction not found",
-                status_code=404
-            )
-            return JSONResponse(
-                status_code=404,
-                content=response.model_dump()
-            )
-        
-        if refresh or transaction.status == TransactionStatus.pending:
-            try:
-                paystack_data = await PaystackService.verify_transaction(reference)
-                
-                if paystack_data["status"] == "success":
-                    paid_at_str = paystack_data["paid_at"]
-                    paid_at = datetime.fromisoformat(paid_at_str.replace("Z", "+00:00")).replace(tzinfo=None)
-                    
-                    transaction = await TransactionService.update_transaction_status(
-                        db=db,
-                        reference=reference,
-                        status=TransactionStatus.success,
-                        paid_at=paid_at
-                    )
-                elif paystack_data["status"] == "failed":
-                    transaction = await TransactionService.update_transaction_status(
-                        db=db,
-                        reference=reference,
-                        status=TransactionStatus.failed
-                    )
-            except Exception:
-                pass
         
         return success_response(
-            message="Transaction status retrieved successfully",
-            data=TransactionStatusResponse.model_validate(transaction).model_dump()
+            message="Event received",
+            data={"status": True},
+            status_code=200
         )
+    
     except Exception as e:
-        response = error_response(
-            message=f"Failed to retrieve transaction status: {str(e)}",
+        await db.rollback()
+        return error_response(
+            message=f"Webhook processing failed: {str(e)}",
             status_code=500
-        )
-        return JSONResponse(
-            status_code=500,
-            content=response.model_dump()
         )

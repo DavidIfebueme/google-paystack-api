@@ -40,7 +40,7 @@ class TransactionService:
         db: AsyncSession,
         email: str,
         amount: int,
-        minutes: int = 10
+        minutes: int = 1
     ) -> Optional[Transaction]:
         cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
         

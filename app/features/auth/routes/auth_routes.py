@@ -1,15 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.platform.db.base import get_db
-from app.platform.response.schemas import success_response, error_response
+from app.platform.db import get_db
 from app.features.auth.services.auth_service import AuthService
-from app.features.auth.schemas.auth import GoogleAuthURLResponse, UserResponse
-from app.platform.config.settings import get_settings
+from app.features.auth.schemas import GoogleAuthURLResponse, UserResponse, TokenResponse
+from app.platform.response.schemas import success_response, error_response
+from app.platform.auth.jwt_service import JWTService
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
-settings = get_settings()
+router = APIRouter()
 
 @router.get("/google/login", response_model=GoogleAuthURLResponse)
 async def google_login():
@@ -23,41 +21,52 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
         user_info = await AuthService.get_google_user_info(access_token)
         user = await AuthService.get_or_create_user(db, user_info)
         
-        redirect_url = f"{settings.FRONTEND_URL}/auth/success?user_id={user.id}"
-        return RedirectResponse(url=redirect_url)
+        jwt_token = JWTService.create_access_token(
+            data={"user_id": str(user.id), "email": user.email}
+        )
+        
+        user_data = {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "picture": user.picture,
+            "created_at": user.created_at.isoformat()
+        }
+        
+        token_data = {
+            "access_token": jwt_token,
+            "token_type": "bearer",
+            "user": user_data
+        }
+        
+        return success_response(
+            message="Login successful",
+            data=token_data,
+            status_code=200
+        )
+    except HTTPException as e:
+        return error_response(message=str(e.detail), status_code=e.status_code)
     except Exception as e:
-        response = error_response(
-            message=f"Authentication failed: {str(e)}",
-            status_code=400
-        )
-        return JSONResponse(
-            status_code=400,
-            content=response.model_dump()
-        )
+        return error_response(message=f"Authentication failed: {str(e)}", status_code=500)
 
 @router.get("/user/{user_id}")
 async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
     try:
         user = await AuthService.get_user_by_id(db, user_id)
         if not user:
-            response = error_response(
-                message="User not found",
-                status_code=404
-            )
-            return JSONResponse(
-                status_code=404,
-                content=response.model_dump()
-            )
+            return error_response(message="User not found", status_code=404)
+        
+        user_data = {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "picture": user.picture,
+            "created_at": user.created_at.isoformat()
+        }
+        
         return success_response(
             message="User retrieved successfully",
-            data=UserResponse.model_validate(user).model_dump()
+            data=user_data
         )
     except Exception as e:
-        response = error_response(
-            message=f"Failed to retrieve user: {str(e)}",
-            status_code=500
-        )
-        return JSONResponse(
-            status_code=500,
-            content=response.model_dump()
-        )
+        return error_response(message=str(e), status_code=500)
