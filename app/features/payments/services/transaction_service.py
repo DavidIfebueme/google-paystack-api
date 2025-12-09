@@ -1,9 +1,10 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from typing import Optional
 from datetime import datetime, timedelta
 
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.features.payments.models.transaction import Transaction, TransactionStatus
+
 
 class TransactionService:
     @staticmethod
@@ -13,7 +14,7 @@ class TransactionService:
         amount: int,
         authorization_url: str,
         email: str,
-        user_id: Optional[str] = None
+        user_id: str | None = None
     ) -> Transaction:
         transaction = Transaction(
             reference=reference,
@@ -27,23 +28,23 @@ class TransactionService:
         await db.commit()
         await db.refresh(transaction)
         return transaction
-    
+
     @staticmethod
-    async def get_transaction_by_reference(db: AsyncSession, reference: str) -> Optional[Transaction]:
+    async def get_transaction_by_reference(db: AsyncSession, reference: str) -> Transaction | None:
         result = await db.execute(
             select(Transaction).where(Transaction.reference == reference)
         )
         return result.scalar_one_or_none()
-    
+
     @staticmethod
     async def find_recent_transaction(
         db: AsyncSession,
         email: str,
         amount: int,
         minutes: int = 1
-    ) -> Optional[Transaction]:
+    ) -> Transaction | None:
         cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
-        
+
         result = await db.execute(
             select(Transaction)
             .where(
@@ -58,14 +59,14 @@ class TransactionService:
             .limit(1)
         )
         return result.scalar_one_or_none()
-    
+
     @staticmethod
     async def update_transaction_status(
         db: AsyncSession,
         reference: str,
         status: TransactionStatus,
-        paid_at: Optional[datetime] = None
-    ) -> Optional[Transaction]:
+        paid_at: datetime | None = None
+    ) -> Transaction | None:
         transaction = await TransactionService.get_transaction_by_reference(db, reference)
         if transaction:
             transaction.status = status
@@ -74,7 +75,7 @@ class TransactionService:
             await db.commit()
             await db.refresh(transaction)
         return transaction
-    
+
     @staticmethod
     async def check_duplicate_transaction(db: AsyncSession, reference: str) -> bool:
         transaction = await TransactionService.get_transaction_by_reference(db, reference)

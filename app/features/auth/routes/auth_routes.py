@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.platform.db import get_db
+
+from app.features.auth.schemas import GoogleAuthURLResponse
 from app.features.auth.services.auth_service import AuthService
-from app.features.auth.schemas import GoogleAuthURLResponse, UserResponse, TokenResponse
-from app.platform.response.schemas import success_response, error_response
 from app.platform.auth.jwt_service import JWTService
+from app.platform.db import get_db
+from app.platform.response.schemas import error_response, success_response
 
 router = APIRouter()
 
@@ -20,11 +20,11 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
         access_token = await AuthService.exchange_code_for_token(code)
         user_info = await AuthService.get_google_user_info(access_token)
         user = await AuthService.get_or_create_user(db, user_info)
-        
+
         jwt_token = JWTService.create_access_token(
             data={"user_id": str(user.id), "email": user.email}
         )
-        
+
         user_data = {
             "id": str(user.id),
             "email": user.email,
@@ -32,13 +32,13 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
             "picture": user.picture,
             "created_at": user.created_at.isoformat()
         }
-        
+
         token_data = {
             "access_token": jwt_token,
             "token_type": "bearer",
             "user": user_data
         }
-        
+
         return success_response(
             message="Login successful",
             data=token_data,
@@ -55,7 +55,7 @@ async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
         user = await AuthService.get_user_by_id(db, user_id)
         if not user:
             return error_response(message="User not found", status_code=404)
-        
+
         user_data = {
             "id": str(user.id),
             "email": user.email,
@@ -63,7 +63,7 @@ async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
             "picture": user.picture,
             "created_at": user.created_at.isoformat()
         }
-        
+
         return success_response(
             message="User retrieved successfully",
             data=user_data

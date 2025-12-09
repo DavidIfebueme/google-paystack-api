@@ -1,6 +1,8 @@
-from typing import Any, Optional
-from pydantic import BaseModel
+from typing import Any
+
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
 
 class ErrorCode:
     INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE"
@@ -17,13 +19,13 @@ class ErrorCode:
 class SuccessResponse(BaseModel):
     status: str = "success"
     message: str
-    data: Optional[Any] = None
+    data: Any | None = None
 
 class ErrorResponse(BaseModel):
     status: str = "error"
     message: str
-    error_code: Optional[str] = None
-    data: Optional[Any] = None
+    error_code: str | None = None
+    data: Any | None = None
 
 def success_response(message: str, data: Any = None, status_code: int = 200) -> JSONResponse:
     response = SuccessResponse(message=message, data=data)
@@ -32,7 +34,7 @@ def success_response(message: str, data: Any = None, status_code: int = 200) -> 
         content=response.model_dump()
     )
 
-def error_response(message: str, status_code: int = 400, error_code: Optional[str] = None, data: Any = None) -> JSONResponse:
+def error_response(message: str, status_code: int = 400, error_code: str | None = None, data: Any = None) -> JSONResponse:
     response = ErrorResponse(message=message, error_code=error_code, data=data)
     return JSONResponse(
         status_code=status_code,

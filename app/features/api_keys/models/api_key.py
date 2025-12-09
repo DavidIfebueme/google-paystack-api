@@ -1,10 +1,12 @@
-from typing import TYPE_CHECKING
-from sqlalchemy import UUID, DateTime, String, Boolean, ForeignKey, Index, JSON
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from datetime import datetime
-import uuid
-from app.platform.db.base import Base
 import enum
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import JSON, UUID, Boolean, DateTime, ForeignKey, Index, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.platform.db.base import Base
 
 if TYPE_CHECKING:
     from app.features.auth.models.user import User
@@ -26,13 +28,13 @@ class APIKey(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    
+
     user: Mapped["User"] = relationship("User", back_populates="api_keys")
-    
+
     __table_args__ = (
         Index("idx_api_key_key", "key"),
         Index("idx_api_key_user_active", "user_id", "is_active"),
     )
-    
+
     def __repr__(self) -> str:
         return f"<APIKey(id={self.id}, name={self.name}, user_id={self.user_id})>"

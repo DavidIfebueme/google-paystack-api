@@ -27,3 +27,8 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["app*"]
 exclude = ["alembic*", "tests*", "scripts*"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.8",
+]

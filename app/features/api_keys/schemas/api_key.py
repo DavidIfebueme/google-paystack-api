@@ -1,11 +1,13 @@
-from pydantic import BaseModel, field_validator
 from datetime import datetime
+
+from pydantic import BaseModel, field_validator
+
 
 class CreateAPIKeyRequest(BaseModel):
     name: str
     permissions: list[str]
     expiry: str
-    
+
     @field_validator('expiry')
     @classmethod
     def validate_expiry(cls, v: str) -> str:
@@ -13,7 +15,7 @@ class CreateAPIKeyRequest(BaseModel):
         if v not in allowed:
             raise ValueError(f'expiry must be one of {allowed}')
         return v
-    
+
     @field_validator('permissions')
     @classmethod
     def validate_permissions(cls, v: list[str]) -> list[str]:
@@ -30,7 +32,7 @@ class CreateAPIKeyResponse(BaseModel):
 class RolloverAPIKeyRequest(BaseModel):
     expired_key_id: str
     expiry: str
-    
+
     @field_validator('expiry')
     @classmethod
     def validate_expiry(cls, v: str) -> str:

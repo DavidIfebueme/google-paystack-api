@@ -1,15 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.platform.db import get_db
+
+from app.features.api_keys.schemas.api_key import CreateAPIKeyRequest, RolloverAPIKeyRequest
+from app.features.api_keys.services.api_key_service import APIKeyService
 from app.features.auth.models.user import User
 from app.platform.auth.dependencies import get_current_user
-from app.features.api_keys.schemas.api_key import (
-    CreateAPIKeyRequest,
-    CreateAPIKeyResponse,
-    RolloverAPIKeyRequest
-)
-from app.features.api_keys.services.api_key_service import APIKeyService
-from app.platform.response.schemas import success_response, error_response, ErrorCode
+from app.platform.db import get_db
+from app.platform.response.schemas import ErrorCode, error_response, success_response
 
 router = APIRouter()
 
@@ -21,7 +18,7 @@ async def create_api_key(
 ):
     try:
         expires_at = APIKeyService.parse_expiry(request.expiry)
-        
+
         api_key = await APIKeyService.create_api_key(
             db=db,
             user_id=current_user.id,
@@ -29,18 +26,18 @@ async def create_api_key(
             permissions=request.permissions,
             expires_at=expires_at
         )
-        
+
         response_data = {
             "api_key": api_key.key,
             "expires_at": api_key.expires_at.isoformat()
         }
-        
+
         return success_response(
             message="API key created successfully",
             data=response_data,
             status_code=201
         )
-    
+
     except ValueError as e:
         error_msg = str(e)
         error_code = ErrorCode.KEY_LIMIT_EXCEEDED if "Maximum" in error_msg else None
@@ -68,18 +65,18 @@ async def rollover_api_key(
             expired_key_id=request.expired_key_id,
             new_expiry=request.expiry
         )
-        
+
         response_data = {
             "api_key": new_api_key.key,
             "expires_at": new_api_key.expires_at.isoformat()
         }
-        
+
         return success_response(
             message="API key rolled over successfully",
             data=response_data,
             status_code=201
         )
-    
+
     except ValueError as e:
         return error_response(
             message=str(e),

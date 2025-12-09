@@ -1,9 +1,11 @@
-from pydantic import BaseModel, field_validator
 from datetime import datetime
+
+from pydantic import BaseModel, field_validator
+
 
 class DepositRequest(BaseModel):
     amount: int
-    
+
     @field_validator('amount')
     @classmethod
     def validate_amount(cls, v: int) -> int:
@@ -18,14 +20,14 @@ class DepositResponse(BaseModel):
 class TransferRequest(BaseModel):
     wallet_number: str
     amount: int
-    
+
     @field_validator('wallet_number')
     @classmethod
     def validate_wallet_number(cls, v: str) -> str:
         if len(v) != 13 or not v.isdigit():
             raise ValueError('Wallet number must be exactly 13 digits')
         return v
-    
+
     @field_validator('amount')
     @classmethod
     def validate_amount(cls, v: int) -> int:

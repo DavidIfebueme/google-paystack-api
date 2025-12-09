@@ -1,10 +1,13 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 import uuid
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.features.payments.models.transaction import Transaction, TransactionStatus, TransactionType
 
+
 class WalletTransactionService:
-    
+
     @staticmethod
     async def create_deposit_transaction(
         db: AsyncSession,
@@ -17,7 +20,7 @@ class WalletTransactionService:
         existing = await WalletTransactionService.get_transaction_by_reference(db, reference)
         if existing:
             return existing
-        
+
         transaction = Transaction(
             reference=reference,
             user_id=user_id,
@@ -27,12 +30,12 @@ class WalletTransactionService:
             transaction_type=TransactionType.deposit,
             authorization_url=authorization_url
         )
-        
+
         db.add(transaction)
         await db.commit()
         await db.refresh(transaction)
         return transaction
-    
+
     @staticmethod
     async def create_transfer_transaction(
         db: AsyncSession,
@@ -45,7 +48,7 @@ class WalletTransactionService:
         existing = await WalletTransactionService.get_transaction_by_reference(db, reference)
         if existing:
             raise ValueError("Transfer already processed")
-        
+
         transaction = Transaction(
             reference=reference,
             user_id=user_id,
@@ -55,12 +58,12 @@ class WalletTransactionService:
             sender_wallet_id=sender_wallet_id,
             recipient_wallet_id=recipient_wallet_id
         )
-        
+
         db.add(transaction)
         await db.commit()
         await db.refresh(transaction)
         return transaction
-    
+
     @staticmethod
     async def get_user_transactions(db: AsyncSession, user_id: uuid.UUID) -> list[Transaction]:
         result = await db.execute(
@@ -69,7 +72,7 @@ class WalletTransactionService:
             .order_by(Transaction.created_at.desc())
         )
         return list(result.scalars().all())
-    
+
     @staticmethod
     async def get_transaction_by_reference(db: AsyncSession, reference: str) -> Transaction | None:
         result = await db.execute(

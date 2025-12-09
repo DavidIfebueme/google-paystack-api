@@ -1,8 +1,8 @@
 from app.features.payments.schemas.payment import (
     PaymentInitiateRequest,
     PaymentInitiateResponse,
+    PaystackWebhookEvent,
     TransactionStatusResponse,
-    PaystackWebhookEvent
 )
 
 __all__ = [

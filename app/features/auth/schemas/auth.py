@@ -1,6 +1,7 @@
 import uuid
-from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class GoogleAuthURLResponse(BaseModel):
@@ -11,7 +12,7 @@ class GoogleUserInfo(BaseModel):
     email: EmailStr
     name: str
     picture: str | None = None
-    
+
     class Config:
         populate_by_name = True
 
@@ -21,7 +22,7 @@ class UserResponse(BaseModel):
     name: str
     picture: str | None
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 

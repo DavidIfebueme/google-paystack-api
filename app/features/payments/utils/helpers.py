@@ -1,3 +1,6 @@
+import uuid
+
+
 def generate_transaction_reference() -> str:
     return f"TXN_{uuid.uuid4().hex}"
 

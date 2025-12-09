@@ -1,10 +1,10 @@
 from app.features.wallet.schemas.wallet import (
+    BalanceResponse,
     DepositRequest,
     DepositResponse,
+    TransactionHistoryItem,
     TransferRequest,
     TransferResponse,
-    BalanceResponse,
-    TransactionHistoryItem
 )
 
 __all__ = [

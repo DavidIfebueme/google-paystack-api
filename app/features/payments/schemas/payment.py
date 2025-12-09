@@ -1,11 +1,12 @@
-from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
-import uuid
+
+from pydantic import BaseModel, Field, field_validator
+
 
 class PaymentInitiateRequest(BaseModel):
     amount: int = Field(..., gt=0, description="Amount in kobo (must be positive)")
     email: str
-    
+
     @field_validator('amount')
     @classmethod
     def validate_amount(cls, v):
@@ -22,7 +23,7 @@ class TransactionStatusResponse(BaseModel):
     status: str
     amount: int
     paid_at: datetime | None
-    
+
     class Config:
         from_attributes = True
 
