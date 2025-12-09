@@ -1,229 +1,179 @@
-# google oauth & paystack payment api
 
-backend api implementing google sign-in authentication and paystack payment processing with webhook support.
+# google oauth & paystack wallet api
+
+backend api for google sign-in authentication, wallet management, paystack payment integration, and api key system.
 
 ## overview
 
-this project provides restful endpoints for user authentication via google oauth 2.0 and payment processing through paystack. includes real-time transaction updates via webhooks and proper idempotency handling to prevent duplicate payments.
+restful endpoints for user authentication, wallet creation, deposits, transfers, transaction history, and api key management. all routes protected with jwt or api key permissions. paystack integration for deposits with webhook support and idempotency.
 
 ## architecture
 
-vertical slice architecture organizing features into self-contained modules with their own models, services, schemas, and routes. platform layer handles cross-cutting concerns like database connections and configuration.
-
-```
-app/
-├── features/
-│   ├── auth/           # google oauth implementation
-│   └── payments/       # paystack integration
-├── platform/
-│   ├── config/         # environment settings
-│   ├── db/            # database setup
-│   └── response/      # standardized api responses
-└── api_routers/       # endpoint registration
-```
+vertical slice structure. features are self-contained. platform layer for config, db, and responses.
 
 ## requirements
 
-- python 3.11+
-- postgresql
-- google cloud console project with oauth credentials
-- paystack account with api keys
-- ngrok (for local webhook testing)
+python 3.12+
+postgresql
+google cloud oauth credentials
+paystack api keys
+ngrok (for local webhook testing)
 
 ## setup
 
-### 1. clone and setup environment
+clone repo, setup venv, install dependencies
 
 ```bash
 git clone <repository-url>
 cd google-paystack-api
-python -m venv .venv
-source .venv/bin/activate 
+python3.12 -m venv .venv
+source .venv/bin/activate
 pip install uv
 uv sync
 ```
 
-### 2. configure environment variables
-
-create `.env` file:
+create `.env` file with your secrets and config
 
 ```env
-DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/googlepaystackapi
-
+DATABASE_URL=postgresql+asyncpg://paystack_user:password@localhost:5432/googlepaystackapi
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/google/callback
-
+GOOGLE_REDIRECT_URI=https://yourdomain.com/api/v1/auth/google/callback
 PAYSTACK_SECRET_KEY=sk_test_your_secret_key
 PAYSTACK_PUBLIC_KEY=pk_test_your_public_key
-PAYSTACK_WEBHOOK_SECRET=your_secret_key
-
-APP_NAME=Google-Paystack-API
-DEBUG=True
-FRONTEND_URL=http://localhost:3000
+PAYSTACK_WEBHOOK_SECRET=your_webhook_secret
+APP_NAME=google-paystack-api
+DEBUG=false
+FRONTEND_URL=https://yourdomain.com
+JWT_SECRET_KEY=your_jwt_secret
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_HOURS=24
 ```
 
-### 3. setup database
+setup database
 
 ```bash
 createdb googlepaystackapi
 alembic upgrade head
 ```
 
-### 4. run application
+run app
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-api documentation available at `http://localhost:8000/docs`
+api docs at `/docs`
 
-## api endpoints
+## endpoints
 
 ### authentication
 
-**get google auth url**
+get google auth url
 ```
-GET /api/v1/auth/google/login
-```
-
-returns google oauth consent page url for user authentication.
-
-**google oauth callback**
-```
-GET /api/v1/auth/google/callback?code={authorization_code}
+get /api/v1/auth/google/login
 ```
 
-exchanges authorization code for user information and creates/updates user record. redirects to frontend with user_id parameter.
-
-**get user details**
+google oauth callback
 ```
-GET /api/v1/auth/user/{user_id}
+get /api/v1/auth/google/callback?code={authorization_code}
 ```
 
-retrieves user information by id.
-
-### payments
-
-**initiate payment**
+get user details
 ```
-POST /api/v1/payments/paystack/initiate
-Content-Type: application/json
+get /api/v1/auth/user/{user_id}
+```
 
+### wallet
+
+get wallet balance
+```
+get /api/v1/wallet/balance
+```
+
+deposit to wallet (paystack)
+```
+post /api/v1/wallet/deposit
+content-type: application/json
 {
-  "amount": 50000,
-  "email": "user@example.com"
+  "amount": 50000
 }
 ```
 
-initializes paystack transaction and returns checkout url. implements idempotency by checking for duplicate transactions (same email + amount) within 10-minute window.
+paystack webhook
+```
+post /api/v1/payments/paystack/webhook
+```
 
-response:
-```json
+check deposit status
+```
+get /api/v1/wallet/deposit/{reference}/status
+```
+
+transfer funds
+```
+post /api/v1/wallet/transfer
+content-type: application/json
 {
-  "status_code": 201,
-  "status": "success",
-  "message": "Payment initialized successfully",
-  "data": {
-    "reference": "TXN_abc123...",
-    "authorization_url": "https://checkout.paystack.com/..."
-  }
+  "wallet_number": "1234567890123",
+  "amount": 10000
 }
 ```
 
-**webhook endpoint**
+get transaction history
 ```
-POST /api/v1/payments/paystack/webhook
-```
-
-receives transaction status updates from paystack. validates request signature using hmac sha512 before processing events.
-
-**check transaction status**
-```
-GET /api/v1/payments/{reference}/status?refresh=false
+get /api/v1/wallet/transactions
 ```
 
-returns transaction status from database. set `refresh=true` to fetch latest status from paystack api.
+### api keys
 
-response:
-```json
+create api key
+```
+post /api/v1/keys/create
+content-type: application/json
 {
-  "status_code": 200,
-  "status": "success",
-  "message": "Transaction status retrieved successfully",
-  "data": {
-    "reference": "TXN_abc123...",
-    "status": "success",
-    "amount": 50000,
-    "paid_at": "2025-12-06T13:12:22"
-  }
+  "name": "my-service",
+  "permissions": ["deposit", "transfer", "read"],
+  "expiry": "1D"
 }
 ```
 
-## testing with ngrok
-
-webhooks require publicly accessible url. use ngrok for local development:
-
-```bash
-ngrok http 8000
+rollover api key
+```
+post /api/v1/keys/rollover
+content-type: application/json
+{
+  "expired_key_id": "uuid-of-expired-key",
+  "expiry": "1D"
+}
 ```
 
-update these with your ngrok url:
-1. `.env` - `GOOGLE_REDIRECT_URI`
-2. google cloud console - oauth redirect uri
-3. paystack dashboard - webhook url
+## authentication & route protection
 
-## security considerations
-
-- all secrets stored in environment variables
-- webhook requests verified using hmac signature
-- google oauth state parameter prevents csrf attacks
-- payment references used as idempotency keys
-
-## idempotency
-
-duplicate payment initiations (same email + amount within 10 minutes) return existing transaction instead of creating new one. prevents accidental double charges.
-
-## database schema
-
-### users table
-- id (uuid, primary key)
-- email (unique)
-- name
-- picture url
-- google_id (unique)
-- timestamps
-
-### transactions table
-- id (uuid, primary key)
-- reference (unique, indexed)
-- user_id (foreign key, optional)
-- email
-- amount (integer, kobo/cents)
-- status (enum: pending/success/failed)
-- authorization_url
-- paid_at (nullable)
-- timestamps
+all wallet and api key routes require jwt or api key with correct permissions. use `authorization: bearer <token>` or `x-api-key: <key>` header.
 
 ## error handling
 
-all endpoints return standardized error responses:
+all endpoints return standardized error responses
 
 ```json
 {
-  "status_code": 400,
   "status": "error",
   "message": "descriptive error message",
+  "error_code": "ERROR_CODE",
   "data": null
 }
 ```
 
-http status codes:
-- 200: success
-- 201: resource created
-- 400: bad request
-- 401: unauthorized
-- 404: not found
-- 500: internal server error
+## idempotency
+
+deposits and webhooks are idempotent. duplicate requests with same reference are ignored.
+
+## database schema
+
+users: id, email, name, google_id, picture, timestamps
+wallets: id, user_id, wallet_number, balance, timestamps
+transactions: id, reference, user_id, amount, status, authorization_url, paid_at, timestamps
+api_keys: id, user_id, key, name, permissions, expires_at, is_active, timestamps
 
 
