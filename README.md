@@ -171,9 +171,12 @@ deposits and webhooks are idempotent. duplicate requests with same reference are
 
 ## database schema
 
-users: id, email, name, google_id, picture, timestamps
-wallets: id, user_id, wallet_number, balance, timestamps
-transactions: id, reference, user_id, amount, status, authorization_url, paid_at, timestamps
-api_keys: id, user_id, key, name, permissions, expires_at, is_active, timestamps
+`users: id, email, name, google_id, picture, timestamps`
+
+`wallets: id, user_id, wallet_number, balance, timestamps`
+
+`transactions: id, reference, user_id, amount, status, authorization_url, paid_at, timestamps`
+
+`api_keys: id, user_id, key, name, permissions, expires_at, is_active, timestamps`
 
 
