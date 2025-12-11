@@ -77,9 +77,15 @@ async def deposit_to_wallet(
 @router.get("/deposit/{reference}/status")
 async def get_deposit_status(
     reference: str,
+    live_verify: bool = False,
     db: AsyncSession = Depends(get_db)
 ):
     try:
+        if live_verify:
+            paystack_status = await PaystackService.verify_transaction(reference)
+            await WalletTransactionService.update_transaction_status_from_paystack(
+                db, reference, paystack_status
+            )
         transaction = await WalletTransactionService.get_transaction_by_reference(db, reference)
 
         if not transaction:

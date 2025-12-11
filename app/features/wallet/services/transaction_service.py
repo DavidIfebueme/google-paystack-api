@@ -79,3 +79,20 @@ class WalletTransactionService:
             select(Transaction).where(Transaction.reference == reference)
         )
         return result.scalar_one_or_none()
+    
+    @staticmethod
+    async def update_transaction_status_from_paystack(db: AsyncSession, reference: str, paystack_status: dict):
+        transaction = await WalletTransactionService.get_transaction_by_reference(db, reference)
+        if transaction:
+            status_str = paystack_status.get("status", "").lower()
+            if status_str == "success":
+                transaction.status = TransactionStatus.success
+            elif status_str == "failed":
+                transaction.status = TransactionStatus.failed
+            elif status_str == "abandoned":
+                transaction.status = TransactionStatus.failed
+            else:
+                transaction.status = TransactionStatus.pending
+            await db.commit()
+            await db.refresh(transaction)
+        return transaction
