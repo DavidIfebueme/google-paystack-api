@@ -2,14 +2,25 @@ import secrets
 import string
 import uuid
 from datetime import datetime, timedelta
+from passlib.context import CryptContext
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.api_keys.models.api_key import APIKey
 
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+
 
 class APIKeyService:
+
+    @staticmethod
+    def hash_key(key: str) -> str:
+        return pwd_context.hash(key)
+
+    @staticmethod
+    def verify_key(plain_key: str, hashed_key: str) -> bool:
+        return pwd_context.verify(plain_key, hashed_key)
 
     @staticmethod
     def generate_api_key() -> str:
@@ -58,9 +69,12 @@ class APIKeyService:
         if active_count >= 5:
             raise ValueError("Maximum of 5 active API keys allowed")
 
+        raw_key = APIKeyService.generate_api_key()
+        key_hash = APIKeyService.hash_key(raw_key)
+
         api_key = APIKey(
             user_id=user_id,
-            key=APIKeyService.generate_api_key(),
+            key_hash=key_hash,
             name=name,
             permissions=permissions,
             expires_at=expires_at,
@@ -70,14 +84,19 @@ class APIKeyService:
         db.add(api_key)
         await db.commit()
         await db.refresh(api_key)
+        api_key.raw_key = raw_key
         return api_key
 
     @staticmethod
     async def get_api_key_by_key(db: AsyncSession, key: str) -> APIKey | None:
         result = await db.execute(
-            select(APIKey).where(APIKey.key == key)
+            select(APIKey).where(APIKey.is_active)
         )
-        return result.scalar_one_or_none()
+        keys = result.scalars().all()
+        for api_key in keys:
+            if APIKeyService.verify_key(key, api_key.key_hash):
+                return api_key
+        return None
 
     @staticmethod
     def validate_api_key(api_key: APIKey, required_permission: str) -> bool:

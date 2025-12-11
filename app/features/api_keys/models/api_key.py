@@ -21,7 +21,7 @@ class APIKey(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    key: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     permissions: Mapped[list] = mapped_column(JSON, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -32,7 +32,7 @@ class APIKey(Base):
     user: Mapped["User"] = relationship("User", back_populates="api_keys")
 
     __table_args__ = (
-        Index("idx_api_key_key", "key"),
+        Index("idx_api_key_key", "key_hash"),
         Index("idx_api_key_user_active", "user_id", "is_active"),
     )
 

@@ -28,7 +28,7 @@ async def create_api_key(
         )
 
         response_data = {
-            "api_key": api_key.key,
+            "api_key": api_key.raw_key,
             "expires_at": api_key.expires_at.isoformat()
         }
 
@@ -67,7 +67,7 @@ async def rollover_api_key(
         )
 
         response_data = {
-            "api_key": new_api_key.key,
+            "api_key": new_api_key.raw_key,
             "expires_at": new_api_key.expires_at.isoformat()
         }
 

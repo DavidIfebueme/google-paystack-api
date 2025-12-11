@@ -8,6 +8,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app.platform.config.settings import get_settings
 from app.platform.db.base import Base
+from app.features.auth.models import user
+from app.features.api_keys.models import api_key
+from app.features.wallet.models import wallet
+from app.features.payments.models import transaction
 
 config = context.config
 settings = get_settings()

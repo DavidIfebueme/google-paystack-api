@@ -1,21 +1,21 @@
 """initial migrations
 
-Revision ID: 50d12666166d
-Revises:
-Create Date: 2025-12-09 12:45:20.629505
+Revision ID: d2f873264907
+Revises: 7e6df606d708
+Create Date: 2025-12-11 08:16:48.892317
 
 """
-from collections.abc import Sequence
-
-import sqlalchemy as sa
+from typing import Sequence, Union
 
 from alembic import op
+import sqlalchemy as sa
+
 
 # revision identifiers, used by Alembic.
-revision: str = '50d12666166d'
-down_revision: str | Sequence[str] | None = None
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+revision: str = 'd2f873264907'
+down_revision: Union[str, Sequence[str], None] = '7e6df606d708'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
@@ -36,7 +36,7 @@ def upgrade() -> None:
     op.create_table('api_keys',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
-    sa.Column('key', sa.String(length=255), nullable=False),
+    sa.Column('key_hash', sa.String(length=255), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('permissions', sa.JSON(), nullable=False),
     sa.Column('expires_at', sa.DateTime(), nullable=False),
@@ -46,9 +46,9 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_api_key_key', 'api_keys', ['key'], unique=False)
+    op.create_index('idx_api_key_key', 'api_keys', ['key_hash'], unique=False)
     op.create_index('idx_api_key_user_active', 'api_keys', ['user_id', 'is_active'], unique=False)
-    op.create_index(op.f('ix_api_keys_key'), 'api_keys', ['key'], unique=True)
+    op.create_index(op.f('ix_api_keys_key_hash'), 'api_keys', ['key_hash'], unique=True)
     op.create_table('wallets',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
@@ -103,7 +103,7 @@ def downgrade() -> None:
     op.drop_index('idx_wallet_user_id', table_name='wallets')
     op.drop_index('idx_wallet_number', table_name='wallets')
     op.drop_table('wallets')
-    op.drop_index(op.f('ix_api_keys_key'), table_name='api_keys')
+    op.drop_index(op.f('ix_api_keys_key_hash'), table_name='api_keys')
     op.drop_index('idx_api_key_user_active', table_name='api_keys')
     op.drop_index('idx_api_key_key', table_name='api_keys')
     op.drop_table('api_keys')
